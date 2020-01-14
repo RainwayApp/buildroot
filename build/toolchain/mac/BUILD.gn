@@ -17,7 +17,7 @@ import("//build/toolchain/clang.gni")
 import("//build/toolchain/clang_static_analyzer.gni")
 import("//build/toolchain/goma.gni")
 
-assert(!enable_bitcode || !use_ios_simulator)
+assert(!enable_bitcode || target_os == "tvos" || !use_ios_simulator)
 assert(!enable_bitcode || (use_xcode || bitcode_marker))
 
 if (use_goma) {
@@ -248,6 +248,25 @@ mac_toolchain("ios_clang_arm") {
   ld = cxx
   is_clang = true
   sysroot_flags = "-isysroot $ios_device_sdk_path -miphoneos-version-min=$ios_deployment_target"
+}
+
+# Toolchain used for tvOS device targets.
+mac_toolchain("tvos_clang_arm") {
+  toolchain_cpu = "arm"
+  toolchain_os = "mac"
+  if (!use_xcode) {
+    prefix = rebase_path(llvm_bin_path, root_build_dir)
+    ar = "$prefix/llvm-ar"
+    cc = "$prefix/clang"
+    cxx = "$prefix/clang++"
+  } else {
+    ar = "ar"
+    cc = "clang"
+    cxx = "clang++"
+  }
+  ld = cxx
+  is_clang = true
+  sysroot_flags = "-isysroot $tvos_device_sdk_path -mtvos-version-min=$tvos_deployment_target"
 }
 
 # Toolchain used for iOS simulator targets.

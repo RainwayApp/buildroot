@@ -140,7 +140,7 @@ declare_args() {
 
   # Set to true when compiling with the Clang compiler. Typically this is used
   # to configure warnings.
-  is_clang = current_os == "mac" || current_os == "ios" ||
+  is_clang = current_os == "mac" || current_os == "ios" || current_os == "tvos" ||
              current_os == "linux" || current_os == "chromeos"
 
   # Compile for Address Sanitizer to find memory bugs.
@@ -192,6 +192,7 @@ if (current_os == "win") {
   is_fuchsia = false
   is_fuchsia_host = false
   is_ios = false
+  is_tvos = false
   is_linux = false
   is_mac = false
   is_posix = false
@@ -202,6 +203,7 @@ if (current_os == "win") {
   is_fuchsia = false
   is_fuchsia_host = false
   is_ios = false
+  is_tvos = false
   is_linux = false
   is_mac = true
   is_posix = true
@@ -212,6 +214,7 @@ if (current_os == "win") {
   is_fuchsia = false
   is_fuchsia_host = false
   is_ios = false
+  is_tvos = false
   is_linux = false
   is_mac = false
   is_posix = true
@@ -222,6 +225,7 @@ if (current_os == "win") {
   is_fuchsia = false
   is_fuchsia_host = false
   is_ios = false
+  is_tvos = false
   is_linux = true
   is_mac = false
   is_posix = true
@@ -235,6 +239,7 @@ if (current_os == "win") {
   is_fuchsia = false
   is_fuchsia_host = false
   is_ios = false
+  is_tvos = false
   is_linux = false
   is_mac = false
   is_posix = true
@@ -245,6 +250,18 @@ if (current_os == "win") {
   is_fuchsia = false
   is_fuchsia_host = false
   is_ios = true
+  is_tvos = false
+  is_linux = false
+  is_mac = false
+  is_posix = true
+  is_win = false
+} else if (current_os == "tvos") {
+  is_android = false
+  is_chromeos = false
+  is_fuchsia = false
+  is_fuchsia_host = false
+  is_ios = false
+  is_tvos = true
   is_linux = false
   is_mac = false
   is_posix = true
@@ -255,6 +272,7 @@ if (current_os == "win") {
   is_fuchsia = false
   is_fuchsia_host = false
   is_ios = false
+  is_tvos = false
   is_linux = true
   is_mac = false
   is_posix = true
@@ -265,6 +283,7 @@ if (current_os == "win") {
   is_fuchsia = true
   is_fuchsia_host = false
   is_ios = false
+  is_tvos = false
   is_linux = false
   is_mac = false
   is_posix = true
@@ -329,7 +348,7 @@ if (is_linux) {
   _native_compiler_configs += [ "//build/config/linux:sdk" ]
 } else if (is_mac) {
   _native_compiler_configs += [ "//build/config/mac:sdk" ]
-} else if (is_ios) {
+} else if (is_ios || is_tvos) {
   _native_compiler_configs += [ "//build/config/ios:sdk" ]
 } else if (is_android) {
   _native_compiler_configs += [ "//build/config/android:sdk" ]
@@ -513,6 +532,14 @@ if (custom_toolchain != "") {
     set_default_toolchain("//build/toolchain/mac:ios_clang_x64")
   } else {
     set_default_toolchain("//build/toolchain/mac:ios_clang_arm")
+  }
+} else if (is_tvos) {
+  import("//build/config/ios/ios_sdk.gni")  # For use_tvos_simulator
+  host_toolchain = "//build/toolchain/mac:clang_$host_cpu"
+  if (use_tvos_simulator) {
+    set_default_toolchain("//build/toolchain/mac:tvos_clang_x64")
+  } else {
+    set_default_toolchain("//build/toolchain/mac:tvos_clang_arm")
   }
 } else if (is_fuchsia) {
   if (host_os == "mac") {
