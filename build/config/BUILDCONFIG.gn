@@ -528,18 +528,18 @@ if (custom_toolchain != "") {
 } else if (is_ios) {
   import("//build/config/ios/ios_sdk.gni")  # For use_ios_simulator
   host_toolchain = "//build/toolchain/mac:clang_$host_cpu"
-  if (use_ios_simulator) {
-    set_default_toolchain("//build/toolchain/mac:ios_clang_x64")
+  if (is_tvos) {
+    if (use_tvos_simulator) {
+      set_default_toolchain("//build/toolchain/mac:tvos_clang_x64")
+    } else {
+      set_default_toolchain("//build/toolchain/mac:tvos_clang_arm")
+    }
   } else {
-    set_default_toolchain("//build/toolchain/mac:ios_clang_arm")
-  }
-} else if (is_tvos) {
-  import("//build/config/ios/ios_sdk.gni")  # For use_tvos_simulator
-  host_toolchain = "//build/toolchain/mac:clang_$host_cpu"
-  if (use_tvos_simulator) {
-    set_default_toolchain("//build/toolchain/mac:tvos_clang_x64")
-  } else {
-    set_default_toolchain("//build/toolchain/mac:tvos_clang_arm")
+    if (use_ios_simulator) {
+      set_default_toolchain("//build/toolchain/mac:ios_clang_x64")
+    } else {
+      set_default_toolchain("//build/toolchain/mac:ios_clang_arm")
+    }
   }
 } else if (is_fuchsia) {
   if (host_os == "mac") {
