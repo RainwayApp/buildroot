@@ -266,7 +266,7 @@ mac_toolchain("tvos_clang_arm") {
   }
   ld = cxx
   is_clang = true
-  sysroot_flags = "-isysroot $tvos_device_sdk_path -mtvos-version-min=$tvos_deployment_target"
+  sysroot_flags = "-isysroot $tvos_device_sdk_path -mappletvos-version-min=$tvos_deployment_target"
 }
 
 # Toolchain used for iOS simulator targets.

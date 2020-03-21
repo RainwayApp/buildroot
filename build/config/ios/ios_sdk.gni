@@ -25,7 +25,7 @@ declare_args() {
   ios_deployment_target = "8.0"
 
   # Version of tvOS that we're targeting.
-  tvos_deployment_target = "13.0"
+  tvos_deployment_target = "9.0"
 
   # The path to the iOS device SDK.
   ios_device_sdk_path = ""
