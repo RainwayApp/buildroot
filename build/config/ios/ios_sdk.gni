@@ -7,20 +7,37 @@ declare_args() {
   # value of use_ios_simulator.
   ios_sdk_path = ""
 
+  # tvOS SDK path to use. When empty this will use the default SDK based on the
+  # value of use_ios_simulator.
+  tvos_sdk_path = ""
+
   # Set to true when targeting a simulator build on iOS. False means that the
   # target is for running on the device. The default value is to use the
   # Simulator except when targeting GYP's Xcode builds (for compat with the
   # existing GYP build).
   use_ios_simulator = true
 
+  # Set to true when targeting a simulator build on tvOS. False means that the
+  # target is for running on the device.
+  use_tvos_simulator = false
+
   # Version of iOS that we're targeting.
   ios_deployment_target = "8.0"
+
+  # Version of tvOS that we're targeting.
+  tvos_deployment_target = "9.0"
 
   # The path to the iOS device SDK.
   ios_device_sdk_path = ""
 
   # The path to the iOS simulator SDK.
   ios_simulator_sdk_path = ""
+
+  # The path to the tvOS device SDK.
+  tvos_device_sdk_path = ""
+
+  # The path to the tvOS simulator SDK.
+  tvos_simulator_sdk_path = ""
 
   # Version of iOS that we're targeting for tests.
   ios_testing_deployment_target = "13.0"
@@ -48,3 +65,27 @@ if (ios_sdk_path == "") {
     ios_sdk_path = ios_device_sdk_path
   }
 }
+
+if (tvos_sdk_path == "") {
+  if (!use_tvos_simulator && tvos_device_sdk_path == "") {
+    _tvos_device_sdk_result =
+        exec_script("ios_sdk.py", [ "appletvos" ], "list lines")
+    tvos_device_sdk_path = _tvos_device_sdk_result[0]
+  }
+
+  if (use_tvos_simulator && tvos_simulator_sdk_path == "") {
+    _tvos_sim_sdk_result =
+        exec_script("ios_sdk.py", [ "appletvsimulator" ], "list lines")
+    tvos_simulator_sdk_path = _tvos_sim_sdk_result[0]
+  }
+
+  # Compute default target.
+  if (use_tvos_simulator) {
+    assert(tvos_simulator_sdk_path != "")
+    tvos_sdk_path = tvos_simulator_sdk_path
+  } else {
+    assert(tvos_device_sdk_path != "")
+    tvos_sdk_path = tvos_device_sdk_path
+  }
+}
+
