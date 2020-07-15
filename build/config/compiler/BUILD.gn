@@ -20,6 +20,7 @@ import("//build/config/profiler.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/ccache.gni")
 import("//build/toolchain/clang.gni")
+import("//build/toolchain/wasm.gni")
 
 declare_args() {
   # Normally, Android builds are lightly optimized, even for debug builds, to
@@ -163,7 +164,6 @@ config("compiler") {
       common_mac_flags += [
         "-arch",
         "x86_64",
-        "-march=core2",
       ]
     } else if (current_cpu == "x86") {
       common_mac_flags += [
@@ -210,10 +210,6 @@ config("compiler") {
       ldflags += [ "-m32" ]
       if (is_clang) {
         cflags += [
-          # Else building libyuv gives clang's register allocator issues,
-          # see llvm.org/PR15798 / crbug.com/233709
-          "-momit-leaf-frame-pointer",
-
           # Align the stack on 16-byte boundaries, http://crbug.com/418554.
           "-mstack-alignment=16",
           "-mstackrealign",
@@ -311,6 +307,26 @@ config("compiler") {
     cflags += [
       "-faligned-allocation",
       "-fnew-alignment=$operator_new_alignment",
+    ]
+  }
+
+  if (is_wasm) {
+    ldflags += [
+      "-s",
+      "WASM=1",
+      "-s",
+      "FORCE_FILESYSTEM=0",
+      "-s",
+      "FILESYSTEM=0",
+      "-s",
+      "NO_EXIT_RUNTIME=1",
+      "-s",
+      "STRICT=1",
+      "-s",
+      "WARN_UNALIGNED=1",
+      # Reduces global namespace pollution.
+      "-s",
+      "MODULARIZE=1",
     ]
   }
 
@@ -500,6 +516,7 @@ config("compiler_arm_fpu") {
 config("runtime_library") {
   cflags = []
   cflags_cc = []
+  cflags_objcc = []
   defines = []
   ldflags = []
   lib_dirs = []
@@ -521,6 +538,20 @@ config("runtime_library") {
     ]
   }
 
+  if (use_flutter_cxx) {
+    cflags_cc += [ "-nostdinc++" ]
+    cflags_objcc += [ "-nostdinc++" ]
+
+    # Unwind seemes to be in these libraries in Linux.
+    if (!is_linux) {
+      ldflags += [ "-nostdlib++" ]
+    }
+    include_dirs = [
+      "//third_party/libcxx/include",
+      "//third_party/libcxxabi/include",
+    ]
+  }
+
   # Android standard library setup.
   if (is_android) {
     if (is_clang) {
@@ -530,8 +561,6 @@ config("runtime_library") {
         "nan=__builtin_nan",
       ]
     }
-
-    defines += [ "__GNU_SOURCE=1" ]  # Necessary for clone().
 
     # TODO(jdduke) Re-enable on mips after resolving linking
     # issues with libc++ (crbug.com/456380).
@@ -554,11 +583,6 @@ config("runtime_library") {
               "$android_ndk_root/sysroot/usr/include/$android_target_triple",
               root_build_dir),
       "-D__ANDROID_API__=$android_api_level",
-    ]
-
-    include_dirs = [
-      "//third_party/libcxx/include",
-      "//third_party/libcxxabi/include",
     ]
 
     # libunwind and libandroid_support also live in $android_libcpp_root.
@@ -589,13 +613,7 @@ config("runtime_library") {
   # We compile our own libc++ on all Linux targets except i386 (for
   # gen_snapshot) where this is not supported.
   if (is_linux) {
-    if (current_cpu != "x86") {
-      cflags_cc += [ "-nostdinc++" ]
-      include_dirs = [
-        "//third_party/libcxx/include",
-        "//third_party/libcxxabi/include",
-      ]
-    } else {
+    if (!use_flutter_cxx) {
       cflags_cc += [ "-stdlib=libstdc++" ]
       ldflags += [ "-stdlib=libstdc++" ]
       libs += [ "gcc" ]
@@ -624,6 +642,15 @@ if (is_win) {
     "/wd4311",  # Pointer truncation from PVOID to DWORD.
     "/wd4477",  # Format string requires wchar_t*
   ]
+  import("//build/toolchain/goma.gni")
+  if (is_clang && use_goma) {
+    # goma compilation doesn't preserve file case, so don't warn about
+    # case-mismatches.
+    default_warning_flags += [
+      "-Wno-nonportable-include-path",
+      "-Wno-nonportable-system-include-path",
+    ]
+  }
 } else {
   # Common GCC warning setup.
   default_warning_flags += [
@@ -636,15 +663,35 @@ if (is_win) {
     "-Wno-unused-parameter",  # Unused function parameters.
   ]
 
+  if (is_wasm) {
+    default_warning_flags += [
+      # zlib needs this
+      "-Wno-shift-negative-value",
+      # freetype2 needs these two
+      "-Wno-unused-function",
+      "-Wno-unused-variable",
+    ]
+  }
+
+  if (!use_xcode) {
+    default_warning_flags += [
+      "-Wno-implicit-int-float-conversion",
+      "-Wno-c99-designator",
+    ]
+    if (!is_fuchsia) {
+      default_warning_flags += [
+        "-Wno-non-c-typedef-for-linkage",
+        "-Wno-deprecated-copy",
+        "-Wno-range-loop-construct",
+      ]
+    }
+  }
+
   if (is_mac || is_ios) {
     # When compiling Objective-C, warns if a method is used whose
     # availability is newer than the deployment target. This is not
     # required when compiling Chrome for iOS.
     default_warning_flags += [ "-Wunguarded-availability" ]
-  }
-
-  if (is_fuchsia) {
-    default_warning_flags += [ "-Wno-c99-designator" ]
   }
 
   if (allow_deprecated_api_calls) {
@@ -724,16 +771,6 @@ config("no_rtti") {
 }
 
 # Warnings ---------------------------------------------------------------------
-
-# This will generate warnings when using Clang if code generates exit-time
-# destructors, which will slow down closing the program.
-# TODO(thakis): Make this a blacklist instead, http://crbug.com/101600
-config("wexit_time_destructors") {
-  # TODO: Enable on Windows too, http://crbug.com/404525
-  if (is_clang && !is_win) {
-    cflags = [ "-Wexit-time-destructors" ]
-  }
-}
 
 # On Windows compiling on x64, VC will issue a warning when converting
 # size_t to int because it will truncate the value. Our code should not have
@@ -844,8 +881,13 @@ config("optimize") {
     cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
   } else if (is_ios) {
     cflags = [ "-Os" ] + common_optimize_on_cflags  # Favor size over speed.
-  } else if (is_android) {
+  } else if (is_android || is_fuchsia) {
     cflags = [ "-Oz" ] + common_optimize_on_cflags  # Favor size over speed.
+    if (enable_lto) {
+      lto_flags += [ "-flto" ]
+    }
+  } else if (is_wasm) {
+    cflags = [ "-Oz" ]
     if (enable_lto) {
       lto_flags += [ "-flto" ]
     }
@@ -876,7 +918,9 @@ config("no_optimize") {
       cflags += [ "-fomit-frame-pointer" ]
     }
     ldflags = common_optimize_on_ldflags
-  } else {
+  } else if (is_wasm) {
+    cflags = [ "-O0", "-g4" ]
+  } else  {
     cflags = [ "-O0" ]
   }
 }

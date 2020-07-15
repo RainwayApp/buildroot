@@ -2,8 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Set the root of the engine project.
-flutter_root = "//flutter"
+# define is_wasm
+import("//build/toolchain/wasm.gni")
 
 # =============================================================================
 # PLATFORM SELECTION
@@ -51,6 +51,19 @@ if (target_cpu == "") {
   } else {
     target_cpu = host_cpu
   }
+}
+
+if (is_wasm) {
+  target_os = "wasm"
+  is_android = false
+  is_chromeos = false
+  is_fuchsia = false
+  is_fuchsia_host = false
+  is_ios = false
+  is_linux = false
+  is_mac = false
+  is_posix = false
+  is_win = false
 }
 
 if (current_cpu == "") {
@@ -283,6 +296,8 @@ if (!is_clang && (is_asan || is_lsan || is_tsan || is_msan)) {
   is_clang = true
 }
 
+use_flutter_cxx = is_clang && (is_linux || is_android || is_mac)
+
 if (is_msan && !is_linux) {
   assert(false, "Memory sanitizer is only available on Linux.")
 }
@@ -308,6 +323,14 @@ _native_compiler_configs = [
   "//build/config/compiler:no_rtti",
   "//build/config/compiler:runtime_library",
 ]
+
+if (use_flutter_cxx) {
+  _native_compiler_configs += [
+    "//third_party/libcxxabi:libcxxabi_config",
+    "//third_party/libcxx:libcxx_config",
+  ]
+}
+
 if (is_win) {
   _native_compiler_configs += [
     "//build/config/win:lean_and_mean",
@@ -337,6 +360,7 @@ if (is_linux) {
 
 if (is_clang) {
   _native_compiler_configs += [ "//build/config/clang:extra_warnings" ]
+  _native_compiler_configs += [ "//build/config/clang:find_bad_constructs" ]
 }
 
 # Optimizations and debug checking.
@@ -469,8 +493,13 @@ if (custom_toolchain != "") {
   host_toolchain = "//build/toolchain/linux:clang_$host_cpu"
   set_default_toolchain("//build/toolchain/custom")
 } else if (is_win) {
+  if (is_clang) {
+    host_toolchain = "//build/toolchain/win:clang_$current_cpu"
+  } else {
+    host_toolchain = "//build/toolchain/win:$current_cpu"
+  }
+
   # On windows we use the same toolchain for host and target by default.
-  host_toolchain = "//build/toolchain/win:$current_cpu"
   set_default_toolchain("$host_toolchain")
 } else if (is_android) {
   if (host_os == "linux") {
@@ -521,6 +550,9 @@ if (custom_toolchain != "") {
     host_toolchain = "//build/toolchain/linux:clang_$host_cpu"
   }
   set_default_toolchain("//build/toolchain/fuchsia")
+} else if (is_wasm) {
+  host_toolchain = "//build/toolchain/wasm"
+  set_default_toolchain("//build/toolchain/wasm")
 } else {
   assert(false, "Toolchain not set because of unknown platform.")
 }
@@ -529,7 +561,7 @@ if (custom_toolchain != "") {
 #
 # Variables
 #   no_default_deps: If true, no standard dependencies will be added.
-if (is_android || (is_linux && current_cpu != "x86")) {
+if (use_flutter_cxx) {
   foreach(_target_type,
           [
             "executable",
